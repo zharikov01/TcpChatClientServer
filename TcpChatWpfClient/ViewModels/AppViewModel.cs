@@ -64,7 +64,7 @@ public partial class AppViewModel : INotifyPropertyChanged
 
         Status = "Нет подключения к серверу";
         WriteLine("Добро пожаловать в TCP-чат!");
-        WriteLine("Введите ваше имя для чата и нажмите Enter");
+        WriteLine("Введите ваше имя для чата и нажмите Enter. Список команд: @help");
     } // AppViewModel
 
 
@@ -79,6 +79,12 @@ public partial class AppViewModel : INotifyPropertyChanged
         } // if
 
         try {
+            // команды клиента выполняются на клиенте, на сервер не передаются
+            if (text.StartsWith('@')) {
+                ExecuteClientCommand(text);
+                return;
+            } // if
+
             // пока нет подключения, введенная строка - имя пользователя в чате
             if (!IsConnected) {
                 await ConnectAsync(text);

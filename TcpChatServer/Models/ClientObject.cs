@@ -3,19 +3,19 @@ using System.Text;
 
 namespace TcpChatServer.Models;
 
-// Работа сервера с клиентом чата - объект этого класса создается 
+// Работа сервера с клиентом чата - объект этого класса создается
 // для каждого подключенного клиента
 public class ClientObject
 {
     // уникальный идентификатор клиента, формируется в конструкторе
     protected internal string Id { get; private set; }
-    
-    // сетевой поток для обмена данными 
+
+    // сетевой поток для обмена данными
     protected internal NetworkStream Stream { get; private set; }
 
-    private string    _userName;
-    private TcpClient _tcpClient;
-    private ServerObject _server;
+    private string _userName = "";
+    private readonly TcpClient _tcpClient;
+    private readonly ServerObject _server;
 
 
     // конструктор выполняет внедрение зависимостей, получает
@@ -27,8 +27,12 @@ public class ClientObject
         _tcpClient = tcpTcpClient;
         _server = serverObject;
 
+        // сетевой поток получаем сразу: клиент добавляется в коллекцию
+        // соединений и может получать сообщения других участников
+        Stream = _tcpClient.GetStream();
+
         // добавить себя в коллекцию соединений
-        _server.AddConnection(this); 
+        _server.AddConnection(this);
     } // ClientObject
 
 
@@ -36,26 +40,19 @@ public class ClientObject
     protected internal void Process() {
         try {
             // первое сообщение от клиента - имя клиента в чате
-            Stream = _tcpClient.GetStream();
             _userName = GetMessage();
 
-            // сообщить всем о входе пользователя в чат, вывести это же 
+            // сообщить всем о входе пользователя в чат, вывести это же
             // сообщение в консоль сервера
             var message = $"{_userName} вошел в чат";
             _server.BroadcastMessage(message, this.Id);
             Console.WriteLine(message);
-
-            // TODO: можно реализовать команды клиента, например, отправить
-            // TODO: список пользователей клиенту...
 
             // циклическая часть работы с клиентом
             // получаем сообщения от клиентов
             while (true) {
                 try {
                     message = GetMessage();
-
-                    // тут можно распарсить сообщение от клиента и обработать
-                    // команды серверу
 
                     // эхо-сообщение в консоль
                     message = $"{_userName}: {message}";
@@ -64,40 +61,50 @@ public class ClientObject
                     // отправить сообщение всем участникам чата, кроме текущего пользователя
                     _server.BroadcastMessage(message, this.Id);
                 } catch {
-                    // любую проблему при работе с клиентом трактуем как 
+                    // любую проблему при работе с клиентом трактуем как
                     // отключение клиента
                     message = $"{_userName} покинул чат";
                     Console.WriteLine(message);
                     _server.BroadcastMessage(message, this.Id);
-                    _server.RemoveConnection(this.Id);
                     break;
                 } // try-catch
             } // while
         } catch (Exception ex) {
             Console.WriteLine(ex.Message);
+        } finally {
+            // удалить соединение из коллекции, закрыть подключение
             _server.RemoveConnection(this.Id);
-        } // try-catch
+            Close();
+        } // try-catch-finally
     } // Process
 
 
     // получение входящего сообщения и вывод его в строку
     private string GetMessage() {
         var data = new byte[256];
-        var msgBytes = new List<byte>();
-        
-		do {
-            // Stream.Read() блокирующий вызов
-            Stream.Read(data, 0, data.Length);
-            msgBytes.AddRange(data);
+        using var msgBytes = new MemoryStream();
+
+        do {
+            // Stream.Read() блокирующий вызов, возвращает количество
+            // фактически прочитанных байтов
+            int bytes = Stream.Read(data, 0, data.Length);
+
+            // 0 байтов - клиент закрыл соединение
+            if (bytes == 0) {
+                throw new IOException("Клиент закрыл соединение");
+            } // if
+
+            // в сообщение добавляем только прочитанные байты, а не весь буфер
+            msgBytes.Write(data, 0, bytes);
         } while (Stream.DataAvailable);
 
-        return Encoding.UTF8.GetString([.. msgBytes]);
+        return Encoding.UTF8.GetString(msgBytes.ToArray());
     } // GetMessage
 
 
     // закрытие подключения
     protected internal void Close() {
-        Stream?.Close();
+        Stream.Close();
         _tcpClient.Close();
     } // Close
 } // class ClientObject

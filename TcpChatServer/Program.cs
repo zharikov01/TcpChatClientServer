@@ -1,5 +1,5 @@
 /*
- * Сервер для чата на протоколе TCP
+ * Задание на 06.11.2026 - сервер для чата на протоколе TCP (из классной работы)
  * При первом запуске разрешить доступ к сети для этого приложения
  * Антивирус ошибочно срабатывает, сообщая о заражении этого приложения
  */
@@ -12,7 +12,11 @@ var server = new ServerObject();
 var listenTask = new Task(server.Listen);
 
 Console.Title = "Задание на 06.11.2026 - cервер для чата по протоколу TCP";
-Console.SetWindowSize(42, 25);
+
+// размер окна консоли можно задать только в Windows
+if (OperatingSystem.IsWindows()) {
+    Console.SetWindowSize(60, 25);
+} // if
 
 try {
     listenTask.Start();
